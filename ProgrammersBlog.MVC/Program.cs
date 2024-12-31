@@ -26,9 +26,20 @@ namespace ProgrammersBlog.MVC
 
             app.UseAuthorization();
 
-            app.MapControllerRoute(
-                name: "default",
-                pattern: "{controller=Home}/{action=Index}/{id?}");
+            app.UseEndpoints(endpoints =>
+            {
+                endpoints.MapAreaControllerRoute(
+                    name: "Admin",
+                    areaName: "Admin",
+                    pattern: "Admin/{controller=Home}/{action=Index}/{id?}"
+                );
+                endpoints.MapControllerRoute(
+                    name: "article",
+                    pattern: "{title}/{articleId}",
+                    defaults: new { controller = "Article", action = "Detail" }
+                    );
+                endpoints.MapDefaultControllerRoute();
+            });
 
             app.Run();
         }
