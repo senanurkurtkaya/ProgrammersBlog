@@ -12,6 +12,12 @@ namespace ProgrammersBlog.Data.Concrete.EntityFramework.Contexts
 {
     public class ProgrammersBlogContext: IdentityDbContext<User, Role, int, UserClaim, UserRole, UserLogin, RoleClaim, UserToken> /*IdentityDbContext<User, Role, int, UserClaim, UserRole, UserLogin, RoleClaim, UserToken>*/
     {
+        public ProgrammersBlogContext(DbContextOptions<ProgrammersBlogContext> options)
+            : base(options)
+        {
+            
+        }
+
         public DbSet<Article> Articles  { get; set; }
 
         public DbSet<Comment> Comments { get; set; }

@@ -62,58 +62,60 @@ public void Configure(EntityTypeBuilder<User> builder)
             builder.HasMany<UserToken>().WithOne().HasForeignKey(ut => ut.UserId).IsRequired();
 
             // Each User can have many entries in the UserRole join table
-            builder.HasMany<UserRole>().WithOne().HasForeignKey(ur => ur.UserId).IsRequired();
+            builder.HasMany<UserRole>().WithOne().HasForeignKey(ur => ur.UserId).IsRequired().OnDelete(DeleteBehavior.Restrict);
 
-            var adminUser = new User
-            {
-                Id = 1,
-                UserName = "adminuser",
-                NormalizedUserName = "ADMINUSER",
-                Email = "adminuser@gmail.com",
-                NormalizedEmail = "ADMINUSER@GMAIL.COM",
-                PhoneNumber = "+905555555555",
-                Picture = "/userImages/defaultUser.png",
-                FirstName = "Admin",
-                LastName = "User",
-                About = "Admin User of ProgrammersBlog",
-                TwitterLink = "https://twitter.com/adminuser",
-                InstagramLink = "https://instagram.com/adminuser",
-                YoutubeLink = "https://youtube.com/adminuser",
-                GitHubLink = "https://github.com/adminuser",
-                LinkedInLink = "https://linkedin.com/adminuser",
-                WebsiteLink = "https://programmersblog.com/",
-                FacebookLink = "https://facebook.com/adminuser",
-                EmailConfirmed = true,
-                PhoneNumberConfirmed = true,
-                SecurityStamp = Guid.NewGuid().ToString()
-            };
-            adminUser.PasswordHash = CreatePasswordHash(adminUser, "123456789aa");
-            var editorUser = new User
-            {
-                Id = 2,
-                UserName = "editoruser",
-                NormalizedUserName = "EDITORUSER",
-                Email = "editoruser@gmail.com",
-                NormalizedEmail = "EDITORUSER@GMAIL.COM",
-                PhoneNumber = "+905555555555",
-                Picture = "/userImages/defaultUser.png",
-                FirstName = "Admin",
-                LastName = "User",
-                About = "Editor User of ProgrammersBlog",
-                TwitterLink = "https://twitter.com/editoruser",
-                InstagramLink = "https://instagram.com/editoruser",
-                YoutubeLink = "https://youtube.com/editoruser",
-                GitHubLink = "https://github.com/editoruser",
-                LinkedInLink = "https://linkedin.com/editoruser",
-                WebsiteLink = "https://programmersblog.com/",
-                FacebookLink = "https://facebook.com/editoruser",
-                EmailConfirmed = true,
-                PhoneNumberConfirmed = true,
-                SecurityStamp = Guid.NewGuid().ToString()
-            };
-            editorUser.PasswordHash = CreatePasswordHash(editorUser, "123456789aa");
+            //var adminUser = new User
+            //{
+            //    Id = 1,
+            //    UserName = "adminuser",
+            //    Description = "",
+            //    NormalizedUserName = "ADMINUSER",
+            //    Email = "adminuser@gmail.com",
+            //    NormalizedEmail = "ADMINUSER@GMAIL.COM",
+            //    PhoneNumber = "+905555555555",
+            //    Picture = "/userImages/defaultUser.png",
+            //    FirstName = "Admin",
+            //    LastName = "User",
+            //    About = "Admin User of ProgrammersBlog",
+            //    TwitterLink = "https://twitter.com/adminuser",
+            //    InstagramLink = "https://instagram.com/adminuser",
+            //    YoutubeLink = "https://youtube.com/adminuser",
+            //    GitHubLink = "https://github.com/adminuser",
+            //    LinkedInLink = "https://linkedin.com/adminuser",
+            //    WebsiteLink = "https://programmersblog.com/",
+            //    FacebookLink = "https://facebook.com/adminuser",
+            //    EmailConfirmed = true,
+            //    PhoneNumberConfirmed = true,
+            //    SecurityStamp = Guid.NewGuid().ToString()
+            //};
+            //adminUser.PasswordHash = CreatePasswordHash(adminUser, "123456789aa");
+            //var editorUser = new User
+            //{
+            //    Id = 2,
+            //    UserName = "editoruser",
+            //    Description = "",
+            //    NormalizedUserName = "EDITORUSER",
+            //    Email = "editoruser@gmail.com",
+            //    NormalizedEmail = "EDITORUSER@GMAIL.COM",
+            //    PhoneNumber = "+905555555555",
+            //    Picture = "/userImages/defaultUser.png",
+            //    FirstName = "Admin",
+            //    LastName = "User",
+            //    About = "Editor User of ProgrammersBlog",
+            //    TwitterLink = "https://twitter.com/editoruser",
+            //    InstagramLink = "https://instagram.com/editoruser",
+            //    YoutubeLink = "https://youtube.com/editoruser",
+            //    GitHubLink = "https://github.com/editoruser",
+            //    LinkedInLink = "https://linkedin.com/editoruser",
+            //    WebsiteLink = "https://programmersblog.com/",
+            //    FacebookLink = "https://facebook.com/editoruser",
+            //    EmailConfirmed = true,
+            //    PhoneNumberConfirmed = true,
+            //    SecurityStamp = Guid.NewGuid().ToString()
+            //};
+            //editorUser.PasswordHash = CreatePasswordHash(editorUser, "123456789aa");
 
-            builder.HasData(adminUser, editorUser);
+            //builder.HasData(adminUser, editorUser);
 
         }
         private string CreatePasswordHash(User user, string password)

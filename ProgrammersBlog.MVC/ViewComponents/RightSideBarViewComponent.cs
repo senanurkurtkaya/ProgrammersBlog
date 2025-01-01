@@ -1,4 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+
+using ProgrammersBlog.MVC.Models;
 using ProgrammersBlog.Services.Abstract;
 
 namespace ProgrammersBlog.MVC.ViewComponents

@@ -9,6 +9,10 @@
   <ItemGroup>
     <ProjectReference Include="..\ProgrammersBlog.Services\ProgrammersBlog.Services.csproj" />
     <ProjectReference Include="..\ProgrammersBlog.Shared\ProgrammersBlog.Shared.csproj" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
 	  <PackageReference Include="NToastNotify" Version="8.0.0" />
   </ItemGroup>
 

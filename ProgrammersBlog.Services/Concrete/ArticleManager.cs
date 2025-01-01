@@ -1,9 +1,14 @@
 ﻿using AutoMapper;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
 using ProgrammersBlog.Data.Abstract;
 using ProgrammersBlog.Entities.ComplexTypes;
 using ProgrammersBlog.Entities.Concrete;
 using ProgrammersBlog.Entities.Dtos;
 using ProgrammersBlog.Services.Abstract;
+using ProgrammersBlog.Services.Utilities;
+using ProgrammersBlog.Shared.Entities.Concrete;
 using ProgrammersBlog.Shared.Utilities.Result.Abstract;
 using ProgrammersBlog.Shared.Utilities.Result.Complex_Types;
 using ProgrammersBlog.Shared.Utilities.Result.Concrete;
@@ -18,104 +23,73 @@ namespace ProgrammersBlog.Services.Concrete
 {
     public class ArticleManager : ManagerBase, IArticleService
     {
-        private readonly IMapper _mapper;
-        private readonly IUnitOfWork _unitOfWork;
-
-        public ArticleManager(IUnitOfWork unitOfWork, IMapper mapper)
-            : base(unitOfWork, mapper)
+        private readonly UserManager<User> _userManager;
+        public ArticleManager(IUnitOfWork unitOfWork, IMapper mapper, UserManager<User> userManager) : base(unitOfWork, mapper)
         {
-            _unitOfWork = unitOfWork;
-            _mapper = mapper;
+            _userManager = userManager;
         }
 
-        public async Task<IResult> Add(ArticleAddDto articleAddDto, string createdByName)
+        public async Task<IDataResult<ArticleDto>> GetAsync(int articleId)
         {
-            var article = _mapper.Map<Article>(articleAddDto);
-            article.CreatedByName = createdByName;
-            article.ModifiedByName = createdByName;
-            article.UserId = 1;
-            await _unitOfWork.Articles.AddAsync(article).ContinueWith(t => _unitOfWork.SaveAsync());
-            return new Result(ResultStatus.Success, $"{articleAddDto.Title} Başlıklı makale başarıyla eklenmiştir.");
-
-        }
-
-        public Task<IResult> AddAsync(ArticleAddDto articleAddDto, string createdByName, int userId)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<int>> CountAsync()
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<int>> CountByNonDeletedAsync()
-        {
-            throw new NotImplementedException();
-        }
-
-        public async Task<IResult> Delete(int articleId, string modifiedByName)
-        {
-            var result = await _unitOfWork.Articles.AnyAsync(a => a.Id == articleId);
-            if (result)
-            {
-                var article = await _unitOfWork.Articles.GetAsync(a => a.Id == articleId);
-                article.ModifiedByName = modifiedByName;
-                article.ModifiedDate = DateTime.Now;
-                article.IsDeleted = true;
-
-                await _unitOfWork.Articles.UpdateAsync(article).ContinueWith(t => _unitOfWork.SaveAsync());
-                return new Result(ResultStatus.Success, $"{article.Title} Başlıklı makale başarıyla silinmiştir");
-            }
-            return new Result(ResultStatus.Error, "Böyle bir makale bulunamadı.");
-        }
-
-        public Task<IResult> DeleteAsync(int articleId, string modifiedByName)
-        {
-            throw new NotImplementedException();
-        }
-
-        public async Task<IDataResult<ArticleListDto>> GelAllByCategory(int categoryId)
-        {
-            var result = await _unitOfWork.Categories.AnyAsync(c => c.Id == categoryId);
-            if (result)
-            {
-                var articles = await _unitOfWork.Articles.GetAllAsync(a => a.CategoryId == categoryId && !a.IsDeleted && a.IsActive, ar => ar.User, ar => ar.Category);
-                if (articles.Count > -1)
-                {
-                    return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
-                    {
-                        Articles = articles,
-                        ResultStatus = ResultStatus.Success
-                    });
-
-                }
-                return new DataResult<ArticleListDto>(ResultStatus.Error, "Makaleler Bulunamadı.", null);
-
-            }
-            return new DataResult<ArticleListDto>(ResultStatus.Error, "Böyle bir kategeori bulunamadı.", null);
-        }
-
-
-        public async Task<IDataResult<ArticleDto>> Get(int articleId)
-        {
-            var article = await _unitOfWork.Articles.GetAsync(a => a.Id == articleId, a => a.User, a => a.Category);
+            var article = await UnitOfWork.Articles.GetAsync(a => a.Id == articleId, a => a.User, a => a.Category);
             if (article != null)
             {
+                article.Comments = await UnitOfWork.Comments.GetAllAsync(c => c.ArticleId == articleId && !c.IsDeleted && c.IsActive);
                 return new DataResult<ArticleDto>(ResultStatus.Success, new ArticleDto
                 {
                     Article = article,
                     ResultStatus = ResultStatus.Success
-
                 });
-
             }
-            return new DataResult<ArticleDto>(ResultStatus.Error, "Böyle bir makale bulunamadı.", null);
+            return new DataResult<ArticleDto>(ResultStatus.Error, Messages.Article.NotFound(isPlural: false), null);
         }
 
-        public async Task<IDataResult<ArticleListDto>> GetAll()
+        public async Task<IDataResult<ArticleDto>> GetByIdAsync(int articleId, bool includeCategory, bool includeComments, bool includeUser)
         {
-            var articles = await _unitOfWork.Articles.GetAllAsync(null, a => a.User, a => a.Category);
+            List<Expression<Func<Article, bool>>> predicates = new List<Expression<Func<Article, bool>>>();
+            List<Expression<Func<Article, object>>> includes = new List<Expression<Func<Article, object>>>();
+            if (includeCategory) includes.Add(a => a.Category);
+            if (includeComments) includes.Add(a => a.Comments);
+            if (includeUser) includes.Add(a => a.User);
+            predicates.Add(a => a.Id == articleId);
+            var article = await UnitOfWork.Articles.GetAsyncV2(predicates, includes);
+            if (article == null)
+            {
+                return new DataResult<ArticleDto>(ResultStatus.Warning, message: Messages.General.ValidationError(),
+                    null, new List<ValidationError>
+                    {
+                        new ValidationError
+                        {
+                            PropertyName = "articleId",
+                            Message = Messages.Article.NotFoundById(articleId)
+                        }
+                    });
+            }
+
+            return new DataResult<ArticleDto>(ResultStatus.Success, new ArticleDto
+            {
+                Article = article
+            });
+        }
+
+        public async Task<IDataResult<ArticleUpdateDto>> GetArticleUpdateDtoAsync(int articleId)
+        {
+            var result = await UnitOfWork.Articles.AnyAsync(c => c.Id == articleId);
+            if (result)
+            {
+                var article = await UnitOfWork.Articles.GetAsync(c => c.Id == articleId);
+                var articleUpdateDto = Mapper.Map<ArticleUpdateDto>(article);
+                return new DataResult<ArticleUpdateDto>(ResultStatus.Success, articleUpdateDto);
+            }
+            else
+            {
+                return new DataResult<ArticleUpdateDto>(ResultStatus.Error, Messages.Article.NotFound(isPlural: false), null);
+            }
+        }
+
+        public async Task<IDataResult<ArticleListDto>> GetAllAsync()
+        {
+            var articles = await UnitOfWork.Articles.GetAllAsync(null, a => a.User, a => a.Category);
             if (articles.Count > -1)
             {
                 return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
@@ -124,33 +98,90 @@ namespace ProgrammersBlog.Services.Concrete
                     ResultStatus = ResultStatus.Success
                 });
             }
-            return new DataResult<ArticleListDto>(ResultStatus.Error, "Makaleler Bulunamadı.", null);
+            return new DataResult<ArticleListDto>(ResultStatus.Error, Messages.Article.NotFound(isPlural: true), null);
         }
 
-        public Task<IDataResult<ArticleListDto>> GetAllAsync()
+        public async Task<IDataResult<ArticleListDto>> GetAllAsyncV2(int? categoryId, int? userId, bool? isActive, bool? isDeleted, int currentPage, int pageSize,
+            OrderByGeneral orderBy, bool isAscending, bool includeCategory, bool includeComments, bool includeUser)
         {
-            throw new NotImplementedException();
+            List<Expression<Func<Article, bool>>> predicates = new List<Expression<Func<Article, bool>>>();
+            List<Expression<Func<Article, object>>> includes = new List<Expression<Func<Article, object>>>();
+
+            //Predicates
+            if (categoryId.HasValue)
+            {
+                if (!await UnitOfWork.Categories.AnyAsync(c => c.Id == categoryId.Value))
+                {
+                    return new DataResult<ArticleListDto>(ResultStatus.Warning, message: Messages.General.ValidationError(),
+                        null, new List<ValidationError>
+                        {
+                            new ValidationError
+                            {
+                                PropertyName = "categoryId",
+                                Message = Messages.Category.NotFoundById(categoryId.Value)
+                            }
+                        });
+                }
+                predicates.Add(a => a.CategoryId == categoryId.Value);
+            }
+            if (userId.HasValue)
+            {
+                if (!await _userManager.Users.AnyAsync(u => u.Id == userId.Value))
+                {
+                    return new DataResult<ArticleListDto>(ResultStatus.Warning, message: Messages.General.ValidationError(),
+                        null, new List<ValidationError>
+                        {
+                            new ValidationError
+                            {
+                                PropertyName = "userId",
+                                Message = Messages.User.NotFoundById(userId.Value)
+                            }
+                        });
+                }
+                predicates.Add(a => a.UserId == userId.Value);
+            }
+
+            if (isActive.HasValue) predicates.Add(a => a.IsActive == isActive.Value);
+            if (isDeleted.HasValue) predicates.Add(a => a.IsDeleted == isDeleted.Value);
+            //Includes
+            if (includeCategory) includes.Add(a => a.Category);
+            if (includeComments) includes.Add(a => a.Comments);
+            if (includeUser) includes.Add(a => a.User);
+            var articles = await UnitOfWork.Articles.GetAllAsyncV2(predicates, includes);
+
+            IOrderedEnumerable<Article> sortedArticles;
+
+            switch (orderBy)
+            {
+                case OrderByGeneral.Id:
+                    sortedArticles = isAscending ? articles.OrderBy(a => a.Id) : articles.OrderByDescending(a => a.Id);
+                    break;
+                case OrderByGeneral.Az:
+                    sortedArticles = isAscending ? articles.OrderBy(a => a.Title) : articles.OrderByDescending(a => a.Title);
+                    break;
+                //Default CreatedDate
+                default:
+                    sortedArticles = isAscending ? articles.OrderBy(a => a.CreatedDate) : articles.OrderByDescending(a => a.CreatedDate);
+                    break;
+            }
+
+            return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
+            {
+                Articles = sortedArticles.Skip((currentPage - 1) * pageSize).Take(pageSize).ToList(),
+                CategoryId = categoryId.HasValue ? categoryId.Value : null,
+                CurrentPage = currentPage,
+                PageSize = pageSize,
+                IsAscending = isAscending,
+                TotalCount = articles.Count,
+                ResultStatus = ResultStatus.Success
+            });
         }
 
-        public Task<IDataResult<ArticleListDto>> GetAllAsyncV2(int? categoryId, int? userId, bool? isActive, bool? isDeleted, int currentPage, int pageSize, OrderByGeneral orderBy, bool isAscending, bool includeCategory, bool includeComments, bool includeUser)
+        public async Task<IDataResult<ArticleListDto>> GetAllByNonDeletedAsync()
         {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<ArticleListDto>> GetAllByCategoryAsync(int categoryId)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<ArticleListDto>> GetAllByDeletedAsync()
-        {
-            throw new NotImplementedException();
-        }
-
-        public async Task<IDataResult<ArticleListDto>> GetAllByNonDeleted()
-        {
-            var articles = await _unitOfWork.Articles.GetAllAsync(a => !a.IsDeleted, ar => ar.User, ar => ar.Category);
-            if (articles.Count() > -1)
+            var articles = await UnitOfWork.Articles.GetAllAsync(a => !a.IsDeleted, ar => ar.User, ar => ar.Category);
+            //throw new SqlNullValueException();
+            if (articles.Count > -1)
             {
                 return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
                 {
@@ -158,13 +189,15 @@ namespace ProgrammersBlog.Services.Concrete
                     ResultStatus = ResultStatus.Success
                 });
             }
-            return new DataResult<ArticleListDto>(ResultStatus.Error, "Makaleler Bulunamadı.", null);
+            return new DataResult<ArticleListDto>(ResultStatus.Error, Messages.Article.NotFound(isPlural: true), null);
         }
 
-        public async Task<IDataResult<ArticleListDto>> GetAllByNonDeletedAndActive()
+        public async Task<IDataResult<ArticleListDto>> GetAllByNonDeletedAndActiveAsync()
         {
-            var articles = await _unitOfWork.Articles.GetAllAsync(a => !a.IsDeleted && a.IsActive, ar => ar.User, articles => articles.Category);
-            if (articles.Count() > -1)
+            var articles =
+                await UnitOfWork.Articles.GetAllAsync(a => !a.IsDeleted && a.IsActive, ar => ar.User,
+                    ar => ar.Category);
+            if (articles.Count > -1)
             {
                 return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
                 {
@@ -172,93 +205,360 @@ namespace ProgrammersBlog.Services.Concrete
                     ResultStatus = ResultStatus.Success
                 });
             }
-            return new DataResult<ArticleListDto>(ResultStatus.Error, "Makaleler Bulunamadı.", null);
+            return new DataResult<ArticleListDto>(ResultStatus.Error, Messages.Article.NotFound(isPlural: true), null);
         }
 
-        public Task<IDataResult<ArticleListDto>> GetAllByNonDeletedAndActiveAsync()
+        public async Task<IDataResult<ArticleListDto>> GetAllByCategoryAsync(int categoryId)
         {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<ArticleListDto>> GetAllByNonDeletedAsync()
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<ArticleListDto>> GetAllByPagingAsync(int? categoryId, int currentPage = 1, int pageSize = 5, bool isAscending = false)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<ArticleListDto>> GetAllByUserIdOnFilter(int userId, FilterBy filterBy, OrderBy orderBy, bool isAscending, int takeSize, int categoryId, DateTime startAt, DateTime endAt, int minViewCount, int maxViewCount, int minCommentCount, int maxCommentCount)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<ArticleListDto>> GetAllByViewCountAsync(bool isAscending, int? takeSize)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<ArticleUpdateDto>> GetArticleUpdateDtoAsync(int articleId)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<ArticleDto>> GetAsync(int articleId)
-        {
-            throw new NotImplementedException();
-        }
-
-        public Task<IDataResult<ArticleDto>> GetByIdAsync(int articleId, bool includeCategory, bool includeComments, bool includeUser)
-        {
-            throw new NotImplementedException();
-        }
-
-        public async Task<IResult> HardDelete(int articleId)
-        {
-            var result = await _unitOfWork.Articles.AnyAsync(a => a.Id == articleId);
+            var result = await UnitOfWork.Categories.AnyAsync(c => c.Id == categoryId);
             if (result)
             {
-                var article = await _unitOfWork.Articles.GetAsync(a => a.Id == articleId);
-                await _unitOfWork.Articles.DeleteAsync(article).ContinueWith(t => _unitOfWork.SaveAsync());
-                return new Result(ResultStatus.Success, $"{article.Title} başlıklı makale bvaşarıyla veritabanından silinmiştir.");
+                var articles = await UnitOfWork.Articles.GetAllAsync(
+                    a => a.CategoryId == categoryId && !a.IsDeleted && a.IsActive, ar => ar.User, ar => ar.Category);
+                if (articles.Count > -1)
+                {
+                    return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
+                    {
+                        Articles = articles,
+                        ResultStatus = ResultStatus.Success
+                    });
+                }
+                return new DataResult<ArticleListDto>(ResultStatus.Error, Messages.Article.NotFound(isPlural: true), null);
             }
-            return new Result(ResultStatus.Error, "Böyle bir makale bulunamadı.");
+            return new DataResult<ArticleListDto>(ResultStatus.Error, Messages.Category.NotFound(isPlural: false), null);
 
         }
 
-        public Task<IResult> HardDeleteAsync(int articleId)
+        public async Task<IDataResult<ArticleListDto>> GetAllByDeletedAsync()
         {
-            throw new NotImplementedException();
+            var articles =
+                await UnitOfWork.Articles.GetAllAsync(a => a.IsDeleted, ar => ar.User,
+                    ar => ar.Category);
+            if (articles.Count > -1)
+            {
+                return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
+                {
+                    Articles = articles,
+                    ResultStatus = ResultStatus.Success
+                });
+            }
+            return new DataResult<ArticleListDto>(ResultStatus.Error, Messages.Article.NotFound(isPlural: true), null);
         }
 
-        public Task<IResult> IncreaseViewCountAsync(int articleId)
+        public async Task<IDataResult<ArticleListDto>> GetAllByViewCountAsync(bool isAscending, int? takeSize)
         {
-            throw new NotImplementedException();
+            var articles =
+                await UnitOfWork.Articles.GetAllAsync(a => a.IsActive && !a.IsDeleted, a => a.Category, a => a.User);
+            var sortedArticles = isAscending
+                ? articles.OrderBy(a => a.ViewsCount)
+                : articles.OrderByDescending(a => a.ViewsCount);
+            return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
+            {
+                Articles = takeSize == null ? sortedArticles.ToList() : sortedArticles.Take(takeSize.Value).ToList()
+            });
         }
 
-        public Task<IDataResult<ArticleListDto>> SearchAsync(string keyword, int currentPage = 1, int pageSize = 5, bool isAscending = false)
+        public async Task<IDataResult<ArticleListDto>> GetAllByPagingAsync(int? categoryId, int currentPage = 1, int pageSize = 5, bool isAscending = false)
         {
-            throw new NotImplementedException();
+            pageSize = pageSize > 20 ? 20 : pageSize;
+            var articles = categoryId == null
+                ? await UnitOfWork.Articles.GetAllAsync(a => a.IsActive && !a.IsDeleted, a => a.Category, a => a.User)
+                : await UnitOfWork.Articles.GetAllAsync(a => a.CategoryId == categoryId && a.IsActive && !a.IsDeleted,
+                    a => a.Category, a => a.User);
+
+            var sortedArticles = isAscending ? articles.OrderBy(a => a.Date).Skip((currentPage - 1) * pageSize).Take(pageSize).ToList() : articles.OrderByDescending(a => a.Date).Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
+            return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
+            {
+                Articles = sortedArticles,
+                CategoryId = categoryId == null ? null : categoryId.Value,
+                CurrentPage = currentPage,
+                PageSize = pageSize,
+                TotalCount = articles.Count,
+                IsAscending = isAscending
+            });
         }
 
-        public Task<IResult> UndoDeleteAsync(int articleId, string modifiedByName)
+        public async Task<IDataResult<ArticleListDto>> GetAllByUserIdOnFilter(int userId, FilterBy filterBy, OrderBy orderBy, bool isAscending, int takeSize,
+              int categoryId, DateTime startAt, DateTime endAt, int minViewCount, int maxViewCount, int minCommentCount,
+              int maxCommentCount)
         {
-            throw new NotImplementedException();
+            var anyUser = await _userManager.Users.AnyAsync(u => u.Id == userId);
+            if (!anyUser)
+            {
+                return new DataResult<ArticleListDto>(ResultStatus.Error, $"{userId} numaralı kullanıcı bulunamadı.",
+                    null);
+            }
+
+            var userArticles =
+                await UnitOfWork.Articles.GetAllAsync(a => a.IsActive && !a.IsDeleted && a.UserId == userId);
+            List<Article> sortedArticles = new List<Article>();
+            switch (filterBy)
+            {
+                case FilterBy.Category:
+                    switch (orderBy)
+                    {
+                        case OrderBy.Date:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.CategoryId == categoryId).Take(takeSize)
+                                    .OrderBy(a => a.Date).ToList()
+                                : userArticles.Where(a => a.CategoryId == categoryId).Take(takeSize)
+                                    .OrderByDescending(a => a.Date).ToList();
+                            break;
+                        case OrderBy.ViewCount:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.CategoryId == categoryId).Take(takeSize)
+                                    .OrderBy(a => a.ViewsCount).ToList()
+                                : userArticles.Where(a => a.CategoryId == categoryId).Take(takeSize)
+                                    .OrderByDescending(a => a.ViewsCount).ToList();
+                            break;
+                        case OrderBy.CommentCount:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.CategoryId == categoryId).Take(takeSize)
+                                    .OrderBy(a => a.CommentCount).ToList()
+                                : userArticles.Where(a => a.CategoryId == categoryId).Take(takeSize)
+                                    .OrderByDescending(a => a.CommentCount).ToList();
+                            break;
+                    }
+                    break;
+                case FilterBy.Date:
+                    switch (orderBy)
+                    {
+                        case OrderBy.Date:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.Date >= startAt && a.Date <= endAt).Take(takeSize)
+                                    .OrderBy(a => a.Date).ToList()
+                                : userArticles.Where(a => a.Date >= startAt && a.Date <= endAt).Take(takeSize)
+                                    .OrderByDescending(a => a.Date).ToList();
+                            break;
+                        case OrderBy.ViewCount:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.Date >= startAt && a.Date <= endAt).Take(takeSize)
+                                    .OrderBy(a => a.ViewsCount).ToList()
+                                : userArticles.Where(a => a.Date >= startAt && a.Date <= endAt).Take(takeSize)
+                                    .OrderByDescending(a => a.ViewsCount).ToList();
+                            break;
+                        case OrderBy.CommentCount:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.Date >= startAt && a.Date <= endAt).Take(takeSize)
+                                    .OrderBy(a => a.CommentCount).ToList()
+                                : userArticles.Where(a => a.Date >= startAt && a.Date <= endAt).Take(takeSize)
+                                    .OrderByDescending(a => a.CommentCount).ToList();
+                            break;
+                    }
+                    break;
+                case FilterBy.ViewCount:
+                    switch (orderBy)
+                    {
+                        case OrderBy.Date:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.ViewsCount >= minViewCount && a.ViewsCount <= maxViewCount).Take(takeSize)
+                                    .OrderBy(a => a.Date).ToList()
+                                : userArticles.Where(a => a.ViewsCount >= minViewCount && a.ViewsCount <= maxViewCount).Take(takeSize)
+                                    .OrderByDescending(a => a.Date).ToList();
+                            break;
+                        case OrderBy.ViewCount:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.ViewsCount >= minViewCount && a.ViewsCount <= maxViewCount).Take(takeSize)
+                                    .OrderBy(a => a.ViewsCount).ToList()
+                                : userArticles.Where(a => a.ViewsCount >= minViewCount && a.ViewsCount <= maxViewCount).Take(takeSize)
+                                    .OrderByDescending(a => a.ViewsCount).ToList();
+                            break;
+                        case OrderBy.CommentCount:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.ViewsCount >= minViewCount && a.ViewsCount <= maxViewCount).Take(takeSize)
+                                    .OrderBy(a => a.CommentCount).ToList()
+                                : userArticles.Where(a => a.ViewsCount >= minViewCount && a.ViewsCount <= maxViewCount).Take(takeSize)
+                                    .OrderByDescending(a => a.CommentCount).ToList();
+                            break;
+                    }
+                    break;
+                case FilterBy.CommentCount:
+                    switch (orderBy)
+                    {
+                        case OrderBy.Date:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a =>
+                                        a.CommentCount >= minCommentCount && a.CommentCount <= maxCommentCount)
+                                    .Take(takeSize)
+                                    .OrderBy(a => a.Date).ToList()
+                                : userArticles.Where(a =>
+                                        a.CommentCount >= minCommentCount && a.CommentCount <= maxCommentCount)
+                                    .Take(takeSize)
+                                    .OrderByDescending(a => a.Date).ToList();
+                            break;
+                        case OrderBy.ViewCount:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.CommentCount >= minCommentCount && a.CommentCount <= maxCommentCount)
+                                    .Take(takeSize)
+                                    .OrderBy(a => a.ViewsCount).ToList()
+                                : userArticles.Where(a => a.CommentCount >= minCommentCount && a.CommentCount <= maxCommentCount)
+                                    .Take(takeSize)
+                                    .OrderByDescending(a => a.ViewsCount).ToList();
+                            break;
+                        case OrderBy.CommentCount:
+                            sortedArticles = isAscending
+                                ? userArticles.Where(a => a.CommentCount >= minCommentCount && a.CommentCount <= maxCommentCount)
+                                    .Take(takeSize)
+                                    .OrderBy(a => a.CommentCount).ToList()
+                                : userArticles.Where(a => a.CommentCount >= minCommentCount && a.CommentCount <= maxCommentCount)
+                                    .Take(takeSize)
+                                    .OrderByDescending(a => a.CommentCount).ToList();
+                            break;
+                    }
+
+                    break;
+            }
+
+            return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
+            {
+                Articles = sortedArticles
+            });
         }
 
-        public async Task<IResult> Update(ArticleAddDto articleUpdateDto, string modifiedByName)
+        public async Task<IDataResult<ArticleListDto>> SearchAsync(string keyword, int currentPage = 1, int pageSize = 5, bool isAscending = false)
         {
-            var article = _mapper.Map<Article>(articleUpdateDto);
+            pageSize = pageSize > 20 ? 20 : pageSize;
+            if (string.IsNullOrWhiteSpace(keyword))
+            {
+                var articles =
+                    await UnitOfWork.Articles.GetAllAsync(a => a.IsActive && !a.IsDeleted, a => a.Category,
+                        a => a.User);
+
+                var sortedArticles = isAscending ? articles.OrderBy(a => a.Date).Skip((currentPage - 1) * pageSize).Take(pageSize).ToList() : articles.OrderByDescending(a => a.Date).Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
+                return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
+                {
+                    Articles = sortedArticles,
+                    CurrentPage = currentPage,
+                    PageSize = pageSize,
+                    TotalCount = articles.Count,
+                    IsAscending = isAscending
+                });
+            }
+
+            var searchedArticles = await UnitOfWork.Articles.SearchAsync(new List<Expression<Func<Article, bool>>>
+            {
+                (a)=>a.Title.Contains(keyword),
+                (a)=>a.Category.Name.Contains(keyword),
+                (a)=>a.SeoDescription.Contains(keyword),
+                (a)=>a.SeoTags.Contains(keyword),
+            }, a => a.Category, a => a.User);
+            var searchedAndSortedArticles = isAscending ? searchedArticles.OrderBy(a => a.Date).Skip((currentPage - 1) * pageSize).Take(pageSize).ToList() : searchedArticles.OrderByDescending(a => a.Date).Skip((currentPage - 1) * pageSize).Take(pageSize).ToList();
+            return new DataResult<ArticleListDto>(ResultStatus.Success, new ArticleListDto
+            {
+                Articles = searchedAndSortedArticles,
+                CurrentPage = currentPage,
+                PageSize = pageSize,
+                TotalCount = searchedArticles.Count,
+                IsAscending = isAscending
+            });
+        }
+
+        public async Task<IResult> IncreaseViewCountAsync(int articleId)
+        {
+            var article = await UnitOfWork.Articles.GetAsync(a => a.Id == articleId);
+            if (article == null)
+            {
+                return new Result(ResultStatus.Error, Messages.Article.NotFound(false));
+            }
+
+            article.ViewsCount += 1;
+            await UnitOfWork.Articles.UpdateAsync(article);
+            await UnitOfWork.SaveAsync();
+            return new Result(ResultStatus.Success, Messages.Article.IncreaseViewCount(article.Title));
+        }
+
+        public async Task<IResult> AddAsync(ArticleAddDto articleAddDto, string createdByName, int userId)
+        {
+            var article = Mapper.Map<Article>(articleAddDto);
+            article.CreatedByName = createdByName;
+            article.ModifiedByName = createdByName;
+            article.UserId = userId;
+            await UnitOfWork.Articles.AddAsync(article);
+            await UnitOfWork.SaveAsync();
+            return new Result(ResultStatus.Success, Messages.Article.Add(article.Title));
+        }
+
+        public async Task<IResult> UpdateAsync(ArticleUpdateDto articleUpdateDto, string modifiedByName)
+        {
+            var oldArticle = await UnitOfWork.Articles.GetAsync(a => a.Id == articleUpdateDto.Id);
+            var article = Mapper.Map<ArticleUpdateDto, Article>(articleUpdateDto, oldArticle);
             article.ModifiedByName = modifiedByName;
-            await _unitOfWork.Articles.UpdateAsync(article).ContinueWith(t => _unitOfWork.SaveAsync());
-            return new Result(ResultStatus.Success, $"{articleUpdateDto.Title} başlıklı makale başarıyla güncellenmiştir.");
+            await UnitOfWork.Articles.UpdateAsync(article);
+            await UnitOfWork.SaveAsync();
+            return new Result(ResultStatus.Success, Messages.Article.Update(article.Title));
         }
 
-        public Task<IResult> UpdateAsync(ArticleUpdateDto articleUpdateDto, string modifiedByName)
+        public async Task<IResult> DeleteAsync(int articleId, string modifiedByName)
         {
-            throw new NotImplementedException();
+            var result = await UnitOfWork.Articles.AnyAsync(a => a.Id == articleId);
+            if (result)
+            {
+                var article = await UnitOfWork.Articles.GetAsync(a => a.Id == articleId);
+                article.IsDeleted = true;
+                article.IsActive = false;
+                article.ModifiedByName = modifiedByName;
+                article.ModifiedDate = DateTime.Now;
+                await UnitOfWork.Articles.UpdateAsync(article);
+                await UnitOfWork.SaveAsync();
+                return new Result(ResultStatus.Success, Messages.Article.Delete(article.Title));
+            }
+            return new Result(ResultStatus.Error, Messages.Article.NotFound(isPlural: false));
+        }
+
+        public async Task<IResult> HardDeleteAsync(int articleId)
+        {
+            var result = await UnitOfWork.Articles.AnyAsync(a => a.Id == articleId);
+            if (result)
+            {
+                var article = await UnitOfWork.Articles.GetAsync(a => a.Id == articleId);
+                await UnitOfWork.Articles.DeleteAsync(article);
+                await UnitOfWork.SaveAsync();
+                return new Result(ResultStatus.Success, Messages.Article.HardDelete(article.Title));
+            }
+            return new Result(ResultStatus.Error, Messages.Article.NotFound(isPlural: false));
+        }
+
+        public async Task<IResult> UndoDeleteAsync(int articleId, string modifiedByName)
+        {
+            var result = await UnitOfWork.Articles.AnyAsync(a => a.Id == articleId);
+            if (result)
+            {
+                var article = await UnitOfWork.Articles.GetAsync(a => a.Id == articleId);
+                article.IsDeleted = false;
+                article.IsActive = true;
+                article.ModifiedByName = modifiedByName;
+                article.ModifiedDate = DateTime.Now;
+                await UnitOfWork.Articles.UpdateAsync(article);
+                await UnitOfWork.SaveAsync();
+                return new Result(ResultStatus.Success, Messages.Article.UndoDelete(article.Title));
+            }
+            return new Result(ResultStatus.Error, Messages.Article.NotFound(isPlural: false));
+        }
+
+        public async Task<IDataResult<int>> CountAsync()
+        {
+            var aritclesCount = await UnitOfWork.Articles.CountAsync();
+            if (aritclesCount > -1)
+            {
+                return new DataResult<int>(ResultStatus.Success, aritclesCount);
+            }
+            else
+            {
+                return new DataResult<int>(ResultStatus.Error, $"Beklenmeyen bir hata ile karşılaşıldı.", -1);
+            }
+        }
+
+        public async Task<IDataResult<int>> CountByNonDeletedAsync()
+        {
+            var aritclesCount = await UnitOfWork.Articles.CountAsync(a => a.IsActive);
+            if (aritclesCount > -1)
+            {
+                return new DataResult<int>(ResultStatus.Success, aritclesCount);
+            }
+            else
+            {
+                return new DataResult<int>(ResultStatus.Error, $"Beklenmeyen bir hata ile karşılaşıldı.", -1);
+            }
         }
     }
 }

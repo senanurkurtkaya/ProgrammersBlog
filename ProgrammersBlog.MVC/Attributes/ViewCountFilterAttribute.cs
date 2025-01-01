@@ -7,7 +7,7 @@ namespace ProgrammersBlog.MVC.Attributes
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
     public class ViewCountFilterAttribute : Attribute, IAsyncActionFilter
     {
-        public Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
+        public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
         {
             var articleId = context.ActionArguments["articleId"];
             if (articleId != null)

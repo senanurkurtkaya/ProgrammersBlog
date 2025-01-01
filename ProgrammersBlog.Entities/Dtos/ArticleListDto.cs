@@ -12,6 +12,8 @@ namespace ProgrammersBlog.Entities.Dtos
 {
     public class ArticleListDto :DtoGetBase
     {
+        public int? CategoryId { get; set; }
+
         public IList<Article> Articles { get; set; }
         
     }
