@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ProgrammersBlog.Shared.Entities.Abstract
 {
-    public class EntityBase
+    public abstract class EntityBase
     {
         public virtual int Id { get; set; }
         public DateTime CreatedDate { get; set; } = DateTime.Now; //override createDate = new DateTime(2020/01/01);

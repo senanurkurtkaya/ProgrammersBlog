@@ -1,4 +1,5 @@
 ﻿using ProgrammersBlog.Entities.Concrete;
+using ProgrammersBlog.Shared.Entities.Abstract;
 using ProgrammersBlog.Shared.Utilities.Result.Abstract;
 using System;
 using System.Collections.Generic;

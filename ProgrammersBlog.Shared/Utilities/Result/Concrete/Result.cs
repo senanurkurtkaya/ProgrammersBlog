@@ -1,4 +1,5 @@
-﻿using ProgrammersBlog.Shared.Utilities.Result.Abstract;
+﻿using ProgrammersBlog.Shared.Entities.Concrete;
+using ProgrammersBlog.Shared.Utilities.Result.Abstract;
 using ProgrammersBlog.Shared.Utilities.Result.Complex_Types;
 using System;
 using System.Collections.Generic;
@@ -11,28 +12,44 @@ namespace ProgrammersBlog.Shared.Utilities.Result.Concrete
 {
     public class Result : IResult
     {
-        public Result(ResultStatus ResultStatus)
+        public Result(ResultStatus resultStatus)
         {
-            ResultStatus = ResultStatus;
+            ResultStatus = resultStatus;
         }
-
-        public Result(ResultStatus ResultStatus , string message)
+        public Result(ResultStatus resultStatus, IEnumerable<ValidationError> validationErrors)
         {
-            ResultStatus = ResultStatus;
+            ResultStatus = resultStatus;
+            ValidationErrors = validationErrors;
+        }
+        public Result(ResultStatus resultStatus, string message)
+        {
+            ResultStatus = resultStatus;
             Message = message;
         }
-
-        public Result(ResultStatus ResultStatus, string message ,Exception exception)
+        public Result(ResultStatus resultStatus, string message, IEnumerable<ValidationError> validationErrors)
         {
-            ResultStatus = ResultStatus;
+            ResultStatus = resultStatus;
+            Message = message;
+            ValidationErrors = validationErrors;
+        }
+        public Result(ResultStatus resultStatus, string message, Exception exception, IEnumerable<ValidationError> validationErrors)
+        {
+            ResultStatus = resultStatus;
             Message = message;
             Exception = exception;
+            ValidationErrors = validationErrors;
         }
-        public ResultStatus ResultStatus { get;  }
+        public Result(ResultStatus resultStatus, string message, Exception exception)
+        {
+            ResultStatus = resultStatus;
+            Message = message;
+            Exception = exception;
 
+        }
+
+        public ResultStatus ResultStatus { get; }
         public string Message { get; }
-
-        public Exception Exception { get; }
-        Exception IResult.Exception { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
+        public Exception Exception { get; set; }
+        public IEnumerable<ValidationError> ValidationErrors { get; set; }
     }
 }

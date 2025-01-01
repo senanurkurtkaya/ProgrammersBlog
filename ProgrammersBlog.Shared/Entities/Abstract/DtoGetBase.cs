@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ProgrammersBlog.Shared.Utilities.Result.Abstract
+namespace ProgrammersBlog.Shared.Entities.Abstract
 {
     public abstract class DtoGetBase
     {

@@ -11,7 +11,7 @@ namespace ProgrammersBlog.Entities.Concrete
     {
         public string Text { get; set; }
 
-        public int ArticalId { get; set; }
+        public int ArticleId { get; set; }
 
         public Article Article { get; set; }
 

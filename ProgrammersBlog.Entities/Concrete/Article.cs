@@ -29,6 +29,8 @@ namespace ProgrammersBlog.Entities.Concrete
 
         public Category Category { get; set; }
 
+        public int ViewsCount { get; set; }
+
         public int UserId { get; set; }
 
         public User  User { get; set; }
